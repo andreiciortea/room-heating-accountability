@@ -2,6 +2,7 @@
 
 // Initial beliefs
 target_temp(20).
+heating(true).
 
 temp_management_skill("src/main/jason/skills/temp-management.asl").
 
@@ -28,9 +29,9 @@ temp_management_skill("src/main/jason/skills/temp-management.asl").
        !patch_skill(Evaluation).
 
 // Plan to patch the agent skill based on evaluation feedback
-+!patch_skill(Evaluation) : temp_management_skill(SkillPath)
++!patch_skill(Evaluation) : temp_management_skill(SkillPath) & human_comm(HumanComm)
     <- .print("Attempting to patch temperature management skill...");
-       patchAgentSkill(SkillPath, Evaluation, Success, FixedPlans);
+       patchAgentSkill(SkillPath, Evaluation, HumanComm, Success, FixedPlans);
        if (Success) {
            .print("*** Skill successfully patched! ***");
            .print("Removing skill plans");

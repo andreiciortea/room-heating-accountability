@@ -74,9 +74,69 @@ public class LLMJudge extends Artifact {
         - When suggesting new plans, explicitly state which belief update should trigger them
         """;
 
+
+    private static final String PROMPT_TEMPLATE_HUMAN = """
+        You are an expert evaluator analyzing agent performance in a Jason/AgentSpeak multi-agent system.
+
+        HUMAN's ACCOUNT:
+        %s
+
+        AGENT'S ACCOUNT:
+        %s
+
+        TASK:
+        Analyze the agent's behavior and provide a structured assessment.
+
+        Your analysis should identify:
+
+        1. ROOT CAUSE: What specific aspect of the agent's plans led to the inefficient or suboptimal outcome?
+        - Focus on what conditions were missing from plan contexts or what actions were omitted from plan bodies
+        - Reference specific plan elements from the SKILLS section of the account
+
+        2. BLINDSPOTS: What information was available in the agent's beliefs but not utilized in decision-making?
+        - Identify belief literals that exist but weren't checked in relevant plan contexts
+        - Explain why each piece of information matters for the task
+
+        3. CORRECTIVE ACTIONS: What actions should the agent perform to fix problematic environmental states?
+        - Identify environmental conditions that block goal achievement
+        - Specify what actions from AVAILABLE ARTIFACTS could correct these conditions
+        - Explain when and why these corrections should occur
+
+        4. PREVENTIVE ACTIONS: What modifications to plans would prevent this issue in the future?
+        - Suggest additional context conditions for existing plans
+        - Suggest new plans to handle edge cases or problematic states
+        - **IMPORTANT**: When suggesting new plans, choose triggering events that will actually occur
+        * Prefer triggering events that fire frequently (e.g., beliefs that update regularly)
+        * Avoid triggering events for beliefs that rarely change
+        * If a corrective action is needed during an ongoing process, trigger on beliefs that update during that process
+        - Describe plan triggers and contexts in natural language
+
+        Provide your analysis in the following JSON format:
+        {
+        "rootCause": "Detailed explanation of what went wrong",
+        "blindspots": [
+            "Specific belief or condition that was ignored"
+        ],
+        "correctiveActions": [
+            "Action that should be taken and when"
+        ],
+        "preventiveActions": [
+            "Plan modification or new plan needed"
+        ]
+        }
+
+        IMPORTANT:
+        - Base your analysis ONLY on information present in the agent's account
+        - Focus on actionable, specific feedback
+        - Consider both the agent's beliefs and the environment state
+        - Reference actual plan structures from the SKILLS section
+        - When suggesting new plans, explicitly state which belief update should trigger them
+        """;
+
     private String provider;
     private String model;
     private String apiKey;
+    private double temperature;
     private HttpClient httpClient;
 
     protected void init() {
@@ -84,7 +144,7 @@ public class LLMJudge extends Artifact {
         this.httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(30))
             .build();
-        log("LLMJudge initialized with provider: " + provider + ", model: " + model);
+        log("LLMJudge initialized with provider: " + provider + ", model: " + model + ", temperature: " + temperature);
     }
 
     private void loadConfiguration() {
@@ -95,6 +155,7 @@ public class LLMJudge extends Artifact {
         this.provider = getConfig("LLM_PROVIDER", envFile, "anthropic");
         this.model = getConfig("LLM_MODEL", envFile, "claude-sonnet-4-20250514");
         this.apiKey = getConfig("LLM_API_KEY", envFile, null);
+        this.temperature = Double.parseDouble(getConfig("JUDGE_TEMPERATURE", envFile, "0"));
 
         // Provider-specific API key as fallback
         if (apiKey == null) {
@@ -159,6 +220,29 @@ public class LLMJudge extends Artifact {
         }
         // Finally default
         return defaultValue;
+    }
+
+    @OPERATION
+    public void judgeAccount(String account1, String account2, OpFeedbackParam<String> evaluation) {
+        String prompt = String.format(PROMPT_TEMPLATE_HUMAN, account1, account2);
+
+        try {
+            String response = switch (provider.toLowerCase()) {
+                case "anthropic" -> callAnthropic(prompt);
+                case "openai" -> callOpenAI(prompt);
+                case "gemini" -> callGemini(prompt);
+                default -> throw new IllegalArgumentException("Unknown provider: " + provider);
+            };
+
+            // Extract just the JSON evaluation object from the response
+            String jsonEvaluation = extractJsonObject(response);
+            evaluation.set(jsonEvaluation);
+            log("LLM evaluation completed, extracted JSON evaluation");
+        } catch (Exception e) {
+            String error = "Error calling LLM: " + e.getMessage();
+            log(error);
+            evaluation.set(error);
+        }
     }
 
     @OPERATION
@@ -246,11 +330,12 @@ public class LLMJudge extends Artifact {
             {
                 "model": "%s",
                 "max_tokens": 1024,
+                "temperature": %s,
                 "messages": [
                     {"role": "user", "content": "%s"}
                 ]
             }
-            """.formatted(model, escapeJson(prompt));
+            """.formatted(model, temperature, escapeJson(prompt));
 
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create("https://api.anthropic.com/v1/messages"))
@@ -277,9 +362,10 @@ public class LLMJudge extends Artifact {
                 "messages": [
                     {"role": "user", "content": "%s"}
                 ],
-                "max_completion_tokens": 1024
+                "max_completion_tokens": 1024,
+                "temperature": %s
             }
-            """.formatted(model, escapeJson(prompt));
+            """.formatted(model, escapeJson(prompt), temperature);
 
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create("https://api.openai.com/v1/chat/completions"))
@@ -305,10 +391,11 @@ public class LLMJudge extends Artifact {
                     {"parts": [{"text": "%s"}]}
                 ],
                 "generationConfig": {
-                    "maxOutputTokens": 1024
+                    "maxOutputTokens": 1024,
+                    "temperature": %s
                 }
             }
-            """.formatted(escapeJson(prompt));
+            """.formatted(escapeJson(prompt), temperature);
 
         String url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey;
 

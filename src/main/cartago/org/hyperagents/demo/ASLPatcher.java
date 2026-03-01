@@ -23,7 +23,7 @@ import java.util.Map;
 
 public class ASLPatcher extends Artifact {
 
-    private static final String PROMPT_TEMPLATE = """
+        private static final String PROMPT_TEMPLATE = """
             You are an expert in Jason/AgentSpeak (ASL) programming for multi-agent systems.
 
             CURRENT SKILL CODE:
@@ -93,9 +93,85 @@ public class ASLPatcher extends Artifact {
             Modified skill code:
             """;
 
+    private static final String PROMPT_TEMPLATE_HUMAN = """
+            You are an expert in Jason/AgentSpeak (ASL) programming for multi-agent systems.
+
+            CURRENT SKILL CODE:
+            ```asl
+            %s
+            ```
+
+            EVALUATION FEEDBACK:
+            %s
+
+            AVAILABLE ARTIFACTS (from agent account):
+            window
+                    - observable properties: window_state(X), where X is "closed" or "tilted" (string literals)
+                    - operations: tilt, close
+            heater
+                - observable properties:
+                    - temp(X), where X is the current temperature value
+                    - heating(V), where V is either true or false
+                    - energyConsumed(E), where E is the amount of consumed energy in kWh
+                - operations: startHeating, stopHeating
+            
+            COMMUNICATION ACTIONS:
+            To alert the human of {MESSAGE}, use:
+            .send(jane, tell, {MESSAGE})
+
+            TASK:
+            Modify the skill code to address the issues identified in the feedback.
+
+            Based on the feedback, you should consider:
+
+            1. ADDING PRECONDITIONS to existing plans:
+            - If feedback mentions missing checks, add them to plan contexts
+            - Use beliefs that were identified as blindspots
+            - Maintain existing context conditions while adding new ones
+
+            2. ADDING CORRECTIVE ACTIONS to existing plans:
+            - If feedback mentions environmental conditions that need fixing, add actions to correct them
+            - Place corrective actions before the main actions in plan bodies
+            - Use operations available in the AVAILABLE ARTIFACTS
+
+            3. ADDING NEW PLANS to handle edge cases:
+            - If feedback mentions scenarios not covered by current plans, create new plans
+            - **CRITICAL**: Choose the right triggering event:
+            * Look at existing plans to see which belief updates trigger them
+            * Reuse triggering events from existing plans when adding related corrective plans
+            * If multiple plans handle related aspects of the same goal, they should typically share the same trigger
+            * Avoid creating plans triggered by beliefs that update infrequently
+            * The triggering event should be something that occurs while the problem state exists
+            - New plans should have the same triggering event as related existing plans
+            - Use context conditions to differentiate when each plan applies
+            - Ensure plan contexts are mutually exclusive when appropriate
+            - **Order plans from most specific to least specific contexts**
+
+            JASON/AGENTSPEAK SYNTAX REMINDERS:
+            - Plan structure: +event : context <- body.
+            - Context conditions combined with &
+            - Actions in body separated by semicolons (;)
+            - String literals use double quotes: "value"
+            - Plans are evaluated in order; more specific contexts should come first
+
+            IMPORTANT CONSTRAINTS:
+            - Return ONLY the modified ASL code
+            - Include ALL plans (modified and unmodified)
+            - Do NOT include markdown code fences, explanations, or extra text
+            - Do NOT include comments
+            - Maintain valid Jason/AgentSpeak syntax
+            - Make minimal necessary changes to address the feedback
+            - Always notify a human when indicated in the evaluation feedback
+            - Ensure all string literals use double quotes
+            - When adding new plans for edge cases, use triggering events that will actually fire
+
+            Modified skill code:
+            """;
+
     private String provider;
     private String model;
     private String apiKey;
+    private double temperature;
     private HttpClient httpClient;
 
     protected void init() {
@@ -103,11 +179,11 @@ public class ASLPatcher extends Artifact {
         this.httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(30))
             .build();
-        log("ASLPatcher initialized with provider: " + provider + ", model: " + model);
+        log("ASLPatcher initialized with provider: " + provider + ", model: " + model + ", temperature: " + temperature);
     }
 
     @OPERATION
-    public void patchAgentSkill(String skillFilePath, String evaluationFeedback, 
+    public void patchAgentSkill(String skillFilePath, String evaluationFeedback, Boolean HumanComm,
         OpFeedbackParam<Boolean> success, OpFeedbackParam<String[]> plans) {
         
         try {
@@ -127,7 +203,9 @@ public class ASLPatcher extends Artifact {
             }
 
             // 3. Call LLM to get modified code
-            String prompt = String.format(PROMPT_TEMPLATE, currentCode, evaluationFeedback);
+            String promptTemplate = (HumanComm == true) ? PROMPT_TEMPLATE_HUMAN : PROMPT_TEMPLATE;
+            String prompt =
+                String.format(promptTemplate, currentCode, evaluationFeedback);
             String modifiedCode = callLLM(prompt);
 
             if (modifiedCode == null || modifiedCode.isEmpty()) {
@@ -362,11 +440,12 @@ public class ASLPatcher extends Artifact {
             {
                 "model": "%s",
                 "max_tokens": 2048,
+                "temperature": %s,
                 "messages": [
                     {"role": "user", "content": "%s"}
                 ]
             }
-            """.formatted(model, escapeJson(prompt));
+            """.formatted(model, temperature, escapeJson(prompt));
 
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create("https://api.anthropic.com/v1/messages"))
@@ -393,9 +472,10 @@ public class ASLPatcher extends Artifact {
                 "messages": [
                     {"role": "user", "content": "%s"}
                 ],
-                "max_completion_tokens": 2048
+                "max_completion_tokens": 2048,
+                "temperature": %s
             }
-            """.formatted(model, escapeJson(prompt));
+            """.formatted(model, escapeJson(prompt), temperature);
 
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create("https://api.openai.com/v1/chat/completions"))
@@ -421,10 +501,11 @@ public class ASLPatcher extends Artifact {
                     {"parts": [{"text": "%s"}]}
                 ],
                 "generationConfig": {
-                    "maxOutputTokens": 2048
+                    "maxOutputTokens": 2048,
+                    "temperature": %s
                 }
             }
-            """.formatted(escapeJson(prompt));
+            """.formatted(escapeJson(prompt), temperature);
 
         String url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey;
 
@@ -544,6 +625,7 @@ public class ASLPatcher extends Artifact {
         this.provider = getConfig("LLM_PROVIDER", envFile, "anthropic");
         this.model = getConfig("LLM_MODEL", envFile, "claude-sonnet-4-20250514");
         this.apiKey = getConfig("LLM_API_KEY", envFile, null);
+        this.temperature = Double.parseDouble(getConfig("SKILL_TEMPERATURE", envFile, "0"));
 
         if (apiKey == null) {
             String providerKeyName = switch (provider.toLowerCase()) {

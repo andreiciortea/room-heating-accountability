@@ -1,10 +1,12 @@
 mas room_heating {
 
+    agent jane: human_agent.asl
+
     agent heating_controller: heating_agent.asl {
         focus: living_room.asl_patcher
-        beliefs: human_comm(false)
+        beliefs: human_comm(true)
     }
-    agent energy_evaluator: evaluator_agent.asl {
+    agent energy_evaluator: evaluator_agent_human.asl {
         focus: living_room.heater, living_room.llm_judge
     }
 
@@ -15,7 +17,7 @@ mas room_heating {
         artifact account_builder: org.hyperagents.demo.AccountBuilder()
         artifact asl_patcher: org.hyperagents.demo.ASLPatcher()
 
-        agents: heating_controller, energy_evaluator
+        agents: jane, heating_controller, energy_evaluator
     }
 
     asl-path: "src/main/jason"

@@ -67,3 +67,13 @@ tasks {
         classpath = sourceSets.main.get().runtimeClasspath
     }
 }
+
+tasks {
+    register<JavaExec>("runAgentsHuman") {
+        description = "Runs the JaCaMo application launching the agents"
+        dependsOn("classes")
+        mainClass = "jacamo.infra.JaCaMoLauncher"
+        args = listOf("room_heating_human.jcm")
+        classpath = sourceSets.main.get().runtimeClasspath
+    }
+}
