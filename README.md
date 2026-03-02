@@ -5,18 +5,46 @@ A multi-agent system demonstrating how accountability can support self-improveme
 ## Overview
 
 This project models a Swiss home heating scenario where:
-- A **heating agent** manages a room heater to maintain target temperatures
-- An **evaluator agent** monitors energy consumption and flags inefficiencies
-- When efficiency issues are detected, an **LLM-as-judge** analyzes the heating agent's account and provides feedback
-- The feedback is used to automatically **patch, improve, and relload the agent's plans**
+- A **heating agent (accountor)** manages a room heater to maintain target temperatures
+- An **evaluator agent (accountee)** monitors energy consumption and flags inefficiencies
+- When efficiency issues are detected, the evaluator agent uses an **LLM-as-judge** to analyze the heating agent's account and provide feedback
+- The heating agent uses an LLM to process the feedback and automatically **patch, improve, and reload** its skill for managing the temperature
 
-The scenario simulates a living room with a tilted window that causes significant heat loss, demonstrating how agents can be held accountable for inefficient behavior and improve through LLM-guided feedback.
+The scenario simulates a living room with a tilted window that causes significant heat loss, demonstrating how agents can be held accountable for inefficient behavior and improve through LLM-guided feedback. The project implements also an extended version of the scenario in which a human decided to leave the window open for a bird to fly out.
 
 ## Prerequisites
 
 - **Java 21** or later
 - **Gradle** (uses wrapper, no separate installation needed)
 - An **LLM API key** from one of: Anthropic, OpenAI, or Google Gemini
+
+## Project Structure
+
+```
+room-heating-accountability/
+├── build.gradle.kts           # Gradle build configuration
+├── room_heating.jcm           # JaCaMo multi-agent system configuration
+├── .env                       # LLM configuration (API keys, model)
+├── logging.properties         # Logging configuration
+├── room-heating-scenario.md   # Detailed scenario documentation
+│
+└── src/main/
+    ├── jason/                 # Agent behavior (AgentSpeak)
+    │   ├── heating_agent.asl           # Heating controller agent (accountor)
+    │   ├── evaluator_agent.asl         # Energy monitoring agent (accountee)
+    │   ├── evaluator_agent_human.asl   # Energy monitoring agent for the extended scenario (accountee)
+    │   ├── human_agent.asl             # Proxy for the human accountor
+    │   └── skills/
+    │       └── temp-management.asl # Temperature control plans
+    │
+    └── cartago/               # Artifacts (Java)
+        └── org/hyperagents/demo/
+            ├── Heater.java         # Heater simulation
+            ├── Window.java         # Window state management
+            ├── LLMJudge.java       # LLM evaluation artifact
+            ├── AccountBuilder.java # Accountability report builder
+            └── ASLPatcher.java     # LLM-powered plan patcher
+```
 
 ## Configuration
 
@@ -64,38 +92,11 @@ This launches the JaCaMo multi-agent system with:
 
 The simulation uses accelerated time (1 real second = 60 simulated seconds).
 
-## Project Structure
+To run the extended scenario with a human accountor:
 
-```
-room-heating-accountability/
-├── build.gradle.kts           # Gradle build configuration
-├── room_heating.jcm           # JaCaMo multi-agent system configuration
-├── .env                       # LLM configuration (API keys, model)
-├── logging.properties         # Logging configuration
-├── room-heating-scenario.md   # Detailed scenario documentation
-│
-└── src/main/
-    ├── jason/                 # Agent behavior (AgentSpeak)
-    │   ├── heating_agent.asl      # Heating controller agent
-    │   ├── evaluator_agent.asl    # Energy monitoring agent
-    │   └── skills/
-    │       └── temp-management.asl # Temperature control plans
-    │
-    └── cartago/               # Artifacts (Java)
-        └── org/hyperagents/demo/
-            ├── Heater.java        # Heater simulation
-            ├── Window.java        # Window state management
-            ├── LLMJudge.java      # LLM evaluation artifact
-            ├── AccountBuilder.java # Accountability report builder
-            └── ASLPatcher.java    # LLM-powered plan patcher
+```bash
+./gradlew runAgentsHuman
 ```
 
-## How It Works
-
-1. The **heating agent** monitors room temperature and controls the heater to reach the 20°C target
-2. The **window** starts tilted, causing significant heat loss (61% energy waste)
-3. The **evaluator agent** detects when energy consumption exceeds the expected threshold (0.15 kWh)
-4. An **accountability report** is generated, including the agent's beliefs, actions, and skill plans
-5. The **LLM judge** artifact uses an LLM to analyze the report and identifies blind spots, corrective actions, and prescriptive actions
-6. The **ASL patcher** artifact uses LLM feedback to improve the agent's temperature management skill (a set of plans)
-7. The improved skill is loaded, and the agent continues with better behavior
+In addition to the above agents, this launches a third agent:
+- `jane` — a proxy for the human accountor with a predefined account and behavior (e.g., closing the window if informed by the `heating_controller` that the window needs to be closed to continue heating)
