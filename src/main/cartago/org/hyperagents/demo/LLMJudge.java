@@ -139,6 +139,11 @@ public class LLMJudge extends Artifact {
     private double temperature;
     private HttpClient httpClient;
 
+    // Azure-specific configuration
+    private String azureEndpoint;
+    private String azureDeployment;
+    private String azureApiVersion;
+
     protected void init() {
         loadConfiguration();
         this.httpClient = HttpClient.newBuilder()
@@ -157,12 +162,18 @@ public class LLMJudge extends Artifact {
         this.apiKey = getConfig("LLM_API_KEY", envFile, null);
         this.temperature = Double.parseDouble(getConfig("JUDGE_TEMPERATURE", envFile, "0"));
 
+        // Azure-specific configuration
+        this.azureEndpoint = getConfig("AZURE_OPENAI_ENDPOINT", envFile, null);
+        this.azureDeployment = getConfig("AZURE_OPENAI_DEPLOYMENT", envFile, null);
+        this.azureApiVersion = getConfig("AZURE_OPENAI_API_VERSION", envFile, "2024-02-01");
+
         // Provider-specific API key as fallback
         if (apiKey == null) {
             String providerKeyName = switch (provider.toLowerCase()) {
                 case "anthropic" -> "ANTHROPIC_API_KEY";
                 case "openai" -> "OPENAI_API_KEY";
                 case "gemini" -> "GOOGLE_API_KEY";
+                case "azure" -> "AZURE_OPENAI_API_KEY";
                 default -> null;
             };
             if (providerKeyName != null) {
@@ -231,6 +242,7 @@ public class LLMJudge extends Artifact {
                 case "anthropic" -> callAnthropic(prompt);
                 case "openai" -> callOpenAI(prompt);
                 case "gemini" -> callGemini(prompt);
+                case "azure" -> callAzure(prompt);
                 default -> throw new IllegalArgumentException("Unknown provider: " + provider);
             };
 
@@ -254,6 +266,7 @@ public class LLMJudge extends Artifact {
                 case "anthropic" -> callAnthropic(prompt);
                 case "openai" -> callOpenAI(prompt);
                 case "gemini" -> callGemini(prompt);
+                case "azure" -> callAzure(prompt);
                 default -> throw new IllegalArgumentException("Unknown provider: " + provider);
             };
 
@@ -413,6 +426,42 @@ public class LLMJudge extends Artifact {
         }
 
         return extractGeminiContent(response.body());
+    }
+
+    private String callAzure(String prompt) throws IOException, InterruptedException {
+        if (azureEndpoint == null || azureDeployment == null) {
+            throw new IllegalArgumentException(
+                "Azure OpenAI requires AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT to be set");
+        }
+
+        String requestBody = """
+            {
+                "messages": [
+                    {"role": "user", "content": "%s"}
+                ],
+                "max_tokens": 1024,
+                "temperature": %s
+            }
+            """.formatted(escapeJson(prompt), temperature);
+
+        String url = azureEndpoint + "/openai/deployments/" + azureDeployment
+            + "/chat/completions?api-version=" + azureApiVersion;
+
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .header("Content-Type", "application/json")
+            .header("api-key", apiKey)
+            .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+            .timeout(Duration.ofSeconds(60))
+            .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() != 200) {
+            throw new IOException("Azure OpenAI API error: " + response.statusCode() + " - " + response.body());
+        }
+
+        return extractOpenAIContent(response.body());
     }
 
     private String escapeJson(String text) {
