@@ -34,6 +34,11 @@ public class Window extends Artifact {
     @OPERATION
     public void close() {
         ObsProperty stateProp = getObsProperty("window_state");
+        
+        if ("closed".equals(stateProp.getValue())) {
+            return;
+        }
+
         stateProp.updateValue("closed");
         log("Window closed");
         try {

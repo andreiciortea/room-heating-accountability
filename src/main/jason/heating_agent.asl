@@ -2,7 +2,6 @@
 
 // Initial beliefs
 target_temp(20).
-heating(true).
 
 temp_management_skill("src/main/jason/skills/temp-management.asl").
 
