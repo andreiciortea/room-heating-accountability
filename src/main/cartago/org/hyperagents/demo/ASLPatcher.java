@@ -444,7 +444,7 @@ public class ASLPatcher extends Artifact {
 
                 if (!isInternalAction) {
                     currentPlan.append(c);
-                    plans.add(currentPlan.toString().trim());
+                    plans.add(currentPlan.toString().trim().replace("\\", "\\\\"));
                     currentPlan = null;
                     prevChar = c;
                     continue;

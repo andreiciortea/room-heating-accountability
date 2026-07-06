@@ -76,6 +76,10 @@ GOOGLE_API_KEY=your-google-key
 2. `.env` file values
 3. Default values in code
 
+### Jason library
+
+The project uses a pre-release build of Jason (`libs/jason-interpreter-3.3.2.jar`) instead of the version bundled with JaCaMo. It includes a [fix for `.add_plan` incorrectly handling plans that use the `\==` operator](https://github.com/jason-lang/jason/commit/0477f2f0da1372cce35e13145b6b172637ccfae6). Once the official Jason 3.3.x release is published, we will revert `build.gradle.kts` to the standard JaCaMo dependency and remove `libs/jason-interpreter-3.3.2.jar`.
+
 ### Logging
 
 JaCaMo's logging configuration is in `logging.properties`.

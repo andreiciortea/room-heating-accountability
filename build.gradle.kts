@@ -27,8 +27,15 @@ repositories {
     }
 }
 
+// Exclude the released jason-interpreter from all configurations so the local
+// unreleased JAR in libs/ takes precedence everywhere (jacamo, cartago, moise, etc.)
+configurations.all {
+    exclude(group = "io.github.jason-lang", module = "jason-interpreter")
+}
+
 dependencies {
     implementation("org.jacamo:jacamo:1.2.2")
+    implementation(files("libs/jason-interpreter-3.3.2.jar"))
 }
 
 sourceSets {
