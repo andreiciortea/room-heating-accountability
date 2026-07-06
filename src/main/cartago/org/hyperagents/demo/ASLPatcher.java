@@ -185,6 +185,37 @@ public class ASLPatcher extends Artifact {
             .connectTimeout(Duration.ofSeconds(30))
             .build();
         log("ASLPatcher initialized with provider: " + provider + ", model: " + model + ", temperature: " + temperature);
+
+        String runMode = System.getProperty("RUN_MODE", "experiment");
+        String patchedSkillPath = System.getProperty("PATCHED_SKILL_PATH", "");
+        defineObsProperty("run_mode", runMode);
+        defineObsProperty("patched_skill_path", patchedSkillPath);
+        log("Run mode: " + runMode + (patchedSkillPath.isEmpty() ? "" : ", patched skill: " + patchedSkillPath));
+    }
+    
+    @OPERATION
+    public void loadPatchedSkill(String skillFilePath,
+        OpFeedbackParam<Boolean> success, OpFeedbackParam<String[]> plans) {
+        try {
+            String code = readFile(skillFilePath);
+            if (code == null) {
+                log("Error: Could not read patched skill file: " + skillFilePath);
+                success.set(false);
+                return;
+            }
+            if (!validateASL(code)) {
+                log("Error: Patched skill file failed validation: " + skillFilePath);
+                success.set(false);
+                return;
+            }
+            List<String> skillPlans = parsePlans(code);
+            log("Loaded " + skillPlans.size() + " plans from patched skill: " + skillFilePath);
+            success.set(true);
+            plans.set(skillPlans.toArray(new String[0]));
+        } catch (Exception e) {
+            log("Error loading patched skill: " + e.getMessage());
+            success.set(false);
+        }
     }
 
     @OPERATION

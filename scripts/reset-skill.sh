@@ -1,21 +1,23 @@
 #!/bin/bash
 
-if [ -z "$1" ]; then
-    echo "Usage: $0 <run-number>"
-    exit 1
-fi
+# if [ -z "$1" ]; then
+#     echo "Usage: $0 <run-number>"
+#     exit 1
+# fi
 
-RUN_NUMBER=$1
+# RUN_NUMBER=$1
 SKILL_FILE="src/main/jason/skills/temp-management.asl"
 BACKUP_FILE="${SKILL_FILE}.bak"
-LOGS_DIR="logs/claude-opus-4-5/human"
+# LOGS_DIR="logs/claude-opus-4-5/base"
+# LOGS_DIR="logs/claude-opus-4-5/human"
+# LOGS_DIR="logs/claude-opus-4-5/"
 
 # Ensure logs directory exists
-mkdir -p "$LOGS_DIR"
+# mkdir -p "$LOGS_DIR"
 
 # Copy current skill file to logs with run number
-cp "$SKILL_FILE" "${LOGS_DIR}/temp-management-run-${RUN_NUMBER}.asl"
-echo "Copied skill to ${LOGS_DIR}/temp-management-run-${RUN_NUMBER}.asl"
+# cp "$SKILL_FILE" "${LOGS_DIR}/temp-management-run-${RUN_NUMBER}.asl"
+# echo "Copied skill to ${LOGS_DIR}/temp-management-run-${RUN_NUMBER}.asl"
 
 # Restore from backup
 cp "$BACKUP_FILE" "$SKILL_FILE"

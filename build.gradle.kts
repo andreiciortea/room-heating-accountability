@@ -77,3 +77,48 @@ tasks {
         classpath = sourceSets.main.get().runtimeClasspath
     }
 }
+
+fun resolveSkillPath(project: Project): String {
+    val skillProp = project.findProperty("skill") as? String
+    if (skillProp != null) {
+        if (!project.file(skillProp).exists()) error("Skill file not found: $skillProp")
+        return skillProp
+    }
+    val runProp = project.findProperty("run") as? String
+    val scenarioProp = project.findProperty("scenario") as? String
+    if (runProp != null && scenarioProp != null) {
+        val model = project.findProperty("model") as? String ?: "claude-opus-4-5"
+        val path = "logs/$model/$scenarioProp/temp-management-run-$runProp.asl"
+        if (!project.file(path).exists()) error("Skill file not found: $path (resolved from --scenario $scenarioProp --run $runProp)")
+        return path
+    }
+    return ""
+}
+
+tasks {
+    register<JavaExec>("replayAgents") {
+        description = "Replays a base-scenario experiment in replay_corrective or replay_preventive mode"
+        dependsOn("classes")
+        mainClass = "jacamo.infra.JaCaMoLauncher"
+        args = listOf("room_heating.jcm")
+        classpath = sourceSets.main.get().runtimeClasspath
+        val mode = project.findProperty("mode") as? String ?: "experiment"
+        val skillPath = resolveSkillPath(project)
+        systemProperty("RUN_MODE", mode)
+        systemProperty("PATCHED_SKILL_PATH", skillPath)
+    }
+}
+
+tasks {
+    register<JavaExec>("replayAgentsHuman") {
+        description = "Replays a human-scenario experiment in replay_corrective or replay_preventive mode"
+        dependsOn("classes")
+        mainClass = "jacamo.infra.JaCaMoLauncher"
+        args = listOf("room_heating_human.jcm")
+        classpath = sourceSets.main.get().runtimeClasspath
+        val mode = project.findProperty("mode") as? String ?: "experiment"
+        val skillPath = resolveSkillPath(project)
+        systemProperty("RUN_MODE", mode)
+        systemProperty("PATCHED_SKILL_PATH", skillPath)
+    }
+}

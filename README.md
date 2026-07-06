@@ -100,3 +100,52 @@ To run the extended scenario with a human accountor:
 
 In addition to the above agents, this launches a third agent:
 - `jane` — a proxy for the human accountor with a predefined account and behavior (e.g., closing the window if informed by the `heating_controller` that the window needs to be closed to continue heating)
+
+## Replaying experiments
+
+Logged experiments in `logs/<model>/<scenario>/` include `.asl` files with the skill patched by the accountability mechanism. These can be replayed in two modes that bypass the LLM calls:
+
+| Mode | Description |
+|---|---|
+| `experiment` | Full accountability loop (LLM judge + patcher). The default for new runs. |
+| `replay_corrective` | Start with the base skill; hot-swap the pre-patched skill at the accountability trigger, without calling any LLM. Models corrective adaptation at runtime. |
+| `replay_preventive` | Start JaCaMo with the pre-patched skill already compiled in; the accountability trigger is ignored. Models preventive adaptation prior to deployment. |
+
+### Using `scripts/replay.sh`
+
+The recommended entry point for all modes and scenarios:
+
+```bash
+# New experiment (base scenario)
+./scripts/replay.sh --mode experiment --scenario base
+
+# New experiment (human scenario)
+./scripts/replay.sh --mode experiment --scenario human
+
+# Replay run 1 of the base scenario in corrective mode
+./scripts/replay.sh --mode replay_corrective --scenario base --run 1
+
+# Replay run 5 of the human scenario in preventive mode
+./scripts/replay.sh --mode replay_preventive --scenario human --run 5
+
+# Explicit skill path (any scenario)
+./scripts/replay.sh --mode replay_corrective --scenario base \
+    --skill logs/claude-opus-4-5/base/temp-management-run-1.asl
+
+# Archive the log automatically after closing the app
+./scripts/replay.sh --mode replay_corrective --scenario base --run 1 --out results/
+```
+
+Patched skill files follow the naming convention `temp-management-run-N.asl` and are located in `logs/<model>/<scenario>/`. Note that the log files contain only odd-numbered runs (the patched skill produced after each accountability cycle).
+
+**`replay_preventive` note:** the script temporarily replaces `src/main/jason/skills/temp-management.asl` with the patched skill. The original file is restored automatically when the app is closed (via a `trap EXIT`).
+
+### Archiving logs
+
+After closing a run, archive its log with:
+
+```bash
+scripts/copy-log.sh <run-number> [--scenario base|human] [--model claude-opus-4-5]
+```
+
+The `--out` flag of `replay.sh` does this automatically.
